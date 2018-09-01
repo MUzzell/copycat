@@ -1,5 +1,8 @@
 import numpy as np
 
+import pdb
+
+
 class TransitionTable(object):
 
     def __init__(self, *args, **kwargs):
@@ -26,7 +29,7 @@ class TransitionTable(object):
         self.non_event_prob = kwargs.get('non_event_prob', 1)
 
         self.num_entries = 0
-        self.insert_index 0
+        self.insert_index = 0
 
         self.recent_mem_size = self.hist_spacing * self.hist_len
 
@@ -35,12 +38,14 @@ class TransitionTable(object):
         for i in range(self.hist_len):
             self.hist_ind[i] = (i + 1) * self.hist_spacing
 
-        self.s = np.zeros((self.max_size,) + self.state_dim, dtype=np.uint8)
+        self.s = np.zeros((self.max_size, self.state_dim), dtype=np.uint8)
         self.a = np.zeros(self.max_size, dtype=np.uint32)
         self.r = np.zeros(self.max_size, dtype=np.uint32)
-        self.t = np.zeros(self.maz_size, dtype=np.uint8)
+        self.t = np.zeros(self.max_size, dtype=np.uint8)
 
         self.action_encodings = np.identity(self.n_actions)
+
+        pdb.set_trace()
 
         self.recent_s = []
         self.recent_a = []
@@ -125,8 +130,10 @@ class TransitionTable(object):
 
         self.buf_ind = self.buf_ind + batch_size
 
-        return self.buf_s[idx:idx+batch_size-1], self.buf_r[idx:idx+batch_size-1],
-               self.buf_s2[idx:idx+batch_size-1], self.buf_term[idx:idx+batch_size-1]
+        return (self.buf_s[idx:idx+batch_size-1],
+                self.buf_r[idx:idx+batch_size-1],
+                self.buf_s2[idx:idx+batch_size-1],
+                self.buf_term[idx:idx+batch_size-1])
 
     def concat_frames(self, idx, use_recent=False):
         if use_recent:

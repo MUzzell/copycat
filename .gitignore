@@ -1,4 +1,5 @@
-./env/*
+*.pyc
+env/*
 *.avi
 *.mp4
 *.txt

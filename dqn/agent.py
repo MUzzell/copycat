@@ -1,25 +1,40 @@
 
-from e_greedy import AEGreedy
+from .e_greedy import AEGreedy
+from .transition_table import TransitionTable
 
 import numpy as np
 import tensorflow as tf
 
+
 class NeuralQLearner(object):
 
-    def __init__(self, actions, greedy_conf, *args, **kwargs):
+    def __init__(self, actions, greedy_conf, l_greedy_conf, *args, **kwargs):
 
-        self.actions = kwargs['actions']
+        self.actions = actions
 
-        self.greedy = AEGreedy(greedy_conf)
-        self.l_greedy = AEGreedy(l_greedy_conf)
+        self.greedy = AEGreedy(*greedy_conf)
+        self.l_greedy = AEGreedy(*l_greedy_conf)
 
         self.network = None
         self.target_net = None
-        self.session = None
 
         self.discount = kwargs.get('discount', 0.99)
+        self.state_dim = kwargs.get('state_dim', 7056)
+        self.hist_len = kwargs.get('hist_len', 4)
+        self.hist_spacing = kwargs.get('hist_spacing', 1)
+        self.hist_type = kwargs.get('hist_type', 'linear')
+        self.replay_memory = kwargs.get('replay_memory', 30000)
+        self.non_term_prob = kwargs.get('non_term_prob', )
+        self.minibatch_size = kwargs.get('minibatch_size', 32)
+        self.buffer_size = kwargs.get('buffer_size', 512)
+        self.valid_size = kwargs.get('valid_size', 500)
+        self.target_q = kwargs.get('target_q', 10000)
 
-        self.transitions = TransitionTable()
+        kwargs['n_actions'] = self.actions
+        kwargs['state_dim'] = self.state_dim
+        kwargs['hist_len'] = self.hist_len
+
+        self.transitions = TransitionTable(*args, **kwargs)
 
     def step(self, state):
 
@@ -115,7 +130,7 @@ class NeuralQLearner(object):
         currentFullState = self.transitions.get_recent()
 
         if self.lastState and not test:
-            self.transitions:add(self.lastState, self.lastAction, reward,
+            self.transitions.add(self.lastState, self.lastAction, reward,
                                  self.lastTerm)
 
         if self.numSteps == self.l_start + 1 and not test:
@@ -135,7 +150,7 @@ class NeuralQLearner(object):
             for i in range(self.n_replay):
                 self.qLearnMinibatch()
 
-        if not test then
+        if not test:
             self.steps = self.steps + 1
 
         self.last_state = state

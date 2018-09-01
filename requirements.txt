@@ -1,3 +1,5 @@
 wheel>=0.26
 numpy>=1.15.0
 tensorflow>=1.7.0
+gym>=0.10.5
+gym[atari]
