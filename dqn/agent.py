@@ -1,26 +1,50 @@
 
 from .e_greedy import AEGreedy
 from .transition_table import TransitionTable
+from .img_ops import preproc
 
 import numpy as np
 import tensorflow as tf
+import keras
 
+import pdb
+
+def build_network(input_dims, n_actions):
+
+    nel = np.prod(input_dims)
+
+    model = keras.Sequential([
+            keras.layers.Reshape((4, 84, 84), input_shape=(4,84,84)),
+            keras.layers.Conv2D(32, (8,8), strides=(4,4),
+                                padding='same',
+                                activation='relu'),
+            keras.layers.Conv2D(64, (4,4), strides=(2,2),
+                                padding='same',
+                                activation='relu'),
+            keras.layers.Conv2D(64, (3,3), strides=(1,1),
+                                padding='same',
+                                activation='relu'),
+            keras.layers.Reshape((704,)),
+            keras.layers.Dense(512),
+            keras.layers.Dense(6)
+        ])
+
+    return model
 
 class NeuralQLearner(object):
 
-    def __init__(self, actions, greedy_conf, l_greedy_conf, *args, **kwargs):
+    def __init__(self, n_actions, greedy_conf, l_greedy_conf, *args, **kwargs):
 
-        self.actions = actions
+        self.n_actions = n_actions
 
         self.greedy = AEGreedy(*greedy_conf)
         self.l_greedy = AEGreedy(*l_greedy_conf)
 
-        self.network = None
-        self.target_net = None
-
+        self.l_start = kwargs.get('learn_start', 50000)
         self.discount = kwargs.get('discount', 0.99)
         self.state_dim = kwargs.get('state_dim', 7056)
         self.hist_len = kwargs.get('hist_len', 4)
+        self.ncols = kwargs.get('ncols', 1)
         self.hist_spacing = kwargs.get('hist_spacing', 1)
         self.hist_type = kwargs.get('hist_type', 'linear')
         self.replay_memory = kwargs.get('replay_memory', 30000)
@@ -30,15 +54,31 @@ class NeuralQLearner(object):
         self.valid_size = kwargs.get('valid_size', 500)
         self.target_q = kwargs.get('target_q', 10000)
 
-        kwargs['n_actions'] = self.actions
+        self.max_reward = kwargs.get('max_reward', 1)
+        self.min_reward = kwargs.get('min_reward', -1)
+        self.rescale_r = kwargs.get('rescale_r', True)
+
+        self.input_dims = (self.hist_len * self.ncols, 84, 84)
+
+        kwargs['n_actions'] = self.n_actions
         kwargs['state_dim'] = self.state_dim
         kwargs['hist_len'] = self.hist_len
 
         self.transitions = TransitionTable(*args, **kwargs)
 
+        self.network = build_network(self.input_dims, self.n_actions)
+        self.target_net = build_network(self.input_dims, self.n_actions)
+
+        self.q_max = 1
+        self.r_max = 1
+        self.num_steps = 0
+        self.last_state = None
+        self.last_action = None
+        self.last_term = None
+
     def step(self, state):
 
-        ep = self.greedy.greedy(self.n_actions, self.steps)
+        ep = self.greedy.greedy(self.num_steps)
         if np.random.uniform() < ep:
             return np.random.randint(self.n_actions)
 
@@ -111,10 +151,9 @@ class NeuralQLearner(object):
 
         raise NotImplemented("qLearnMinibatch accumulate update")
 
+    def perceive(self, reward, state, term, test=False):
 
-    def perceive(session, reward, state, term, test=False):
-
-        state = self.preprocess(state).float()
+        state = preproc(state, (84, 84))
 
         if self.max_reward:
             reward = np.min([reward, self.max_reward])
@@ -125,43 +164,43 @@ class NeuralQLearner(object):
         if self.rescale_r:
             self.r_max = np.max([self.r_max, reward])
 
-        self.transitions.add_recent(state, terminal)
+        self.transitions.add_recent_state(state, term)
 
-        currentFullState = self.transitions.get_recent()
+        curr_full_state = self.transitions.get_recent()
 
-        if self.lastState and not test:
-            self.transitions.add(self.lastState, self.lastAction, reward,
-                                 self.lastTerm)
+        if self.last_state is not None and not test:
+            self.transitions.add(
+                self.last_state, self.last_action, reward,
+                self.last_term)
 
-        if self.numSteps == self.l_start + 1 and not test:
+        if self.num_steps == self.l_start + 1 and not test:
             self.sample_validation_data()
 
-        currState = self.transitions.get_recent()
-        currState = currState.resize(1, unpack(self.input_dims))
+        curr_state = self.transitions.get_recent()
+        curr_state = np.expand_dims(curr_state, axis=0)
 
         action_idx = 1
         if not term:
-            action_idx = self.step(state)
+            action_idx = self.step(curr_state)
 
         self.transitions.add_recent_action(action_idx)
 
-        if (self.steps > self.l_start and not test
-                and self.steps % self.update_freq == 0):
+        if (self.num_steps > self.l_start and not test
+                and self.num_steps % self.update_freq == 0):
             for i in range(self.n_replay):
                 self.qLearnMinibatch()
 
         if not test:
-            self.steps = self.steps + 1
+            self.num_steps = self.num_steps + 1
 
         self.last_state = state
         self.last_action = action_idx
         self.last_term = term
 
         if self.target_q and self.num_steps % self.target_q == 1:
-            raise NotImplemented("perceive clone target net")
+            self.target_net.set_weights(self.network.get_weights())
 
         if not term:
             return action_idx
 
         return 0
-

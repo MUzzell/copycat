@@ -3,6 +3,13 @@ import numpy as np
 import pdb
 
 
+def reverse_pop(a):
+    a.reverse()
+    a.pop()
+    a.reverse()
+    return a
+
+
 class TransitionTable(object):
 
     def __init__(self, *args, **kwargs):
@@ -33,10 +40,10 @@ class TransitionTable(object):
 
         self.recent_mem_size = self.hist_spacing * self.hist_len
 
-        self.hist_ind = np.zeros(self.hist_len)
+        self.hist_ind = np.zeros(self.hist_len, dtype=np.uint32)
 
         for i in range(self.hist_len):
-            self.hist_ind[i] = (i + 1) * self.hist_spacing
+            self.hist_ind[i] = (i) * self.hist_spacing
 
         self.s = np.zeros((self.max_size, self.state_dim), dtype=np.uint8)
         self.a = np.zeros(self.max_size, dtype=np.uint32)
@@ -44,8 +51,6 @@ class TransitionTable(object):
         self.t = np.zeros(self.max_size, dtype=np.uint8)
 
         self.action_encodings = np.identity(self.n_actions)
-
-        pdb.set_trace()
 
         self.recent_s = []
         self.recent_a = []
@@ -141,13 +146,12 @@ class TransitionTable(object):
         else:
             s, t = self.s, self.t
 
-        full_state = s[0]
-        full_state.resize(self.hist_len, full_state.shape)
+        full_state = np.resize(s[0], (self.hist_len,)+s[0].shape)
 
         zero_out = False
         ep_start = self.hist_len
 
-        for i in range(self.hist_len-1, -1, -1):
+        for i in range(self.hist_len-2, -1, -1):
             if not zero_out:
                 for j in range(idx+self.hist_ind[i]-1, idx+self.hist_ind[i+1]-2):
                     if t[j] == 1:
@@ -208,9 +212,11 @@ class TransitionTable(object):
         return s, self.a[ar_idx], self.r[ar_idx], s2, self.t[ar_idx+1]
 
     def add(self, s, a, r, term):
-        assert s, "State cannot be null"
-        assert a, "State cannot be null"
-        assert r, "Reward cannot be null"
+        assert s is not None, "State cannot be null"
+        assert a is not None, "Action cannot be null"
+        assert r is not None, "Reward cannot be null"
+
+        pdb.set_trace()
 
         if self.num_entries < self.max_size:
             self.num_entries += 1
@@ -234,15 +240,17 @@ class TransitionTable(object):
 
         if len(self.recent_s) == 0:
             for i in range(self.recent_mem_size):
-                self.recent_s.append(np.copy(s).fill(0))
+                s_copy = np.copy(s)
+                s_copy.fill(0)
+                self.recent_s.append(s_copy)
                 self.recent_t.append(1)
 
         self.recent_s.append(s)
         self.recent_t.append(1 if term else 0)
 
         if len(self.recent_s) > self.recent_mem_size:
-            self.recent_s.reverse().pop().reverse()
-            self.recent_t.reverse().pop().reverse()
+            reverse_pop(self.recent_s)
+            reverse_pop(self.recent_t)
 
     def add_recent_action(self, a):
         if len(self.recent_a) == 0:
@@ -252,5 +260,5 @@ class TransitionTable(object):
         self.recent_a.append(a)
 
         if len(self.recent_a) > self.recent_mem_size:
-            self.recent_a.reverse().pop().reverse()
+            reverse_pop(self.recent_a)
 

@@ -1,5 +1,5 @@
 
-import math
+import numpy as np
 
 
 class AEGreedy(object):
@@ -13,8 +13,8 @@ class AEGreedy(object):
 
     def greedy(self, steps):
         start_diff = self.start - self.end
-        step_diff = math.max([0, steps - self.l_start])
+        step_diff = np.max([0, steps - self.l_start])
 
-        return self.end + math.max(
+        return self.end + np.max([
             0,
-            start_diff * (self.endt - step_diff) / self.ep_endt)
+            start_diff * (self.endt - step_diff) / self.endt])
