@@ -11,25 +11,48 @@ import pdb
 
 def build_network(input_dims, n_actions):
 
-    nel = np.prod(input_dims)
-
+    nel = np.zeros(input_dims).size
+    input_shape = input_dims
     model = keras.Sequential([
-            keras.layers.Reshape((4, 84, 84), input_shape=(4,84,84)),
-            keras.layers.Conv2D(32, (8,8), strides=(4,4),
+            keras.layers.Reshape(input_shape, input_shape=input_shape),
+            keras.layers.Conv2D(32, (8, 8), strides=(4,4),
                                 padding='same',
                                 activation='relu'),
-            keras.layers.Conv2D(64, (4,4), strides=(2,2),
+            keras.layers.Conv2D(64, (4, 4), strides=(2,2),
                                 padding='same',
                                 activation='relu'),
-            keras.layers.Conv2D(64, (3,3), strides=(1,1),
+            keras.layers.Conv2D(64, (3, 3), strides=(1,1),
                                 padding='same',
-                                activation='relu'),
-            keras.layers.Reshape((704,)),
-            keras.layers.Dense(512),
-            keras.layers.Dense(6)
-        ])
+                                activation='relu')
+    ])
+
+    out_shape = model.predict(np.zeros((1,) + input_shape)).shape
+    nel = np.prod(out_shape)
+    # Adding the final 3 layers post-run does nothing
+    model = keras.Sequential([
+        keras.layers.Reshape(input_shape, input_shape=input_shape),
+        keras.layers.Conv2D(32, (8, 8), strides=(4,4),
+                            padding='same',
+                            activation='relu'),
+        keras.layers.Conv2D(64, (4, 4), strides=(2,2),
+                            padding='same',
+                            activation='relu'),
+        keras.layers.Conv2D(64, (3, 3), strides=(1,1),
+                            padding='same',
+                            activation='relu'),
+        keras.layers.Reshape((nel,)),
+        keras.layers.Dense(512),
+        keras.layers.Dense(n_actions)
+    ])
 
     return model
+
+
+def build_action_array(n_actions, action_idx):
+    out = np.zeros(n_actions)
+    out[action_idx] = 1
+    return out
+
 
 class NeuralQLearner(object):
 
@@ -42,6 +65,8 @@ class NeuralQLearner(object):
 
         self.l_start = kwargs.get('learn_start', 50000)
         self.discount = kwargs.get('discount', 0.99)
+        self.update_freq = kwargs.get('update_freq', 1)
+        self.n_replay = kwargs.get('n_replay', 1)
         self.state_dim = kwargs.get('state_dim', 7056)
         self.hist_len = kwargs.get('hist_len', 4)
         self.ncols = kwargs.get('ncols', 1)
@@ -53,6 +78,7 @@ class NeuralQLearner(object):
         self.buffer_size = kwargs.get('buffer_size', 512)
         self.valid_size = kwargs.get('valid_size', 500)
         self.target_q = kwargs.get('target_q', 10000)
+        self.clip_delta = kwargs.get('clip_delta', 1)
 
         self.max_reward = kwargs.get('max_reward', 1)
         self.min_reward = kwargs.get('min_reward', -1)
@@ -87,35 +113,46 @@ class NeuralQLearner(object):
 
         q = self.run_net(state)
 
-    def get_q_update(self, states, actions, rewards, s2, terms, update_qmax=True):
+    def sample_validation_data(self):
+        s, a, r, s2, term = self.transitions.sample(self.valid_size)
+
+        self.valid_s = np.copy(s)
+        self.valid_a = np.copy(a)
+        self.valid_r = np.copy(r)
+        self.valid_s2 = np.copy(s2)
+        self.valid_term = np.copy(term)
+
+    def get_q_update(
+        self,
+        states, actions, rewards, s2, term,
+        update_qmax=True
+    ):
 
         if self.target_q:
             target_q_net = self.target_net
         else:
             target_q_net = self.network
 
-        term = np.mul(term, -1) + 1
+        term = (term * -1) + 1
+        q2_max = target_q_net.predict(s2).max(1)
+        # q2_max = np.random.random(self.n_actions)
+        q2 = np.multiply(q2_max.copy() * self.discount, term)
 
-        raise NotImplemented("get_q_update run q2_max")
-        q2_max = np.random.random(self.n_actions)
-
-        q2 = np.mul(q2_max.copy() * self.discount, term)
-
-        delta = r.copy()
-
+        # delta is not touched before q+1 line,
+        # is this pointless?
+        delta = rewards.copy()
         if self.rescale_r:
-            delta /= self.r_max
-
+            delta = delta / self.r_max
         delta += q2
 
-        raise NotImplemented("get_q_update run q_all")
-        q_all = np.random.random(self.n_actions)
-        q = np.array(q_all.shape[0])
+        q_all = self.network.predict(states)
+        # q_all = np.random.random(self.n_actions)
+        q = np.zeros(q_all.shape[0])
 
-        for i in range(q_all.shpae[0]):
-            q[i] = q_all[i, a[i]]
+        for i in range(q_all.shape[0]):
+            q[i] = q_all[i, int(actions[i])]
 
-        delta += q * -1
+        delta = q + -1
 
         if self.clip_delta:
             delta[delta >= self.clip_delta] = self.clip_delta
@@ -123,33 +160,44 @@ class NeuralQLearner(object):
 
         targets = np.zeros((self.minibatch_size, self.n_actions))
 
-        for i in range(np.min([self.minibatch_size, a.shape[0]])):
-            targets[i, a[i]] = delta[i]
+        for i in range(np.min([self.minibatch_size, actions.shape[0]])):
+            targets[i, int(actions[i])] = delta[i]
 
         return targets, delta, q2_max
 
+    def reset_model(self, lr):
+        # TODO: reset weights
+        self.network.compile(
+            loss='mse',
+            optimizer=keras.optimizers.Adam(lr=lr)
+        )
 
-    def qLearnMinibatch():
+    def qLearnMinibatch(self):
 
-        assert self.transitions.size() > self.minibatch_size
+        assert self.transitions.size > self.minibatch_size
 
         s, a, r, s2, term = self.transitions.sample(self.minibatch_size)
+        s2 = s2.reshape(32, self.hist_len, 84, 84)
+        s = s.reshape(32, self.hist_len, 84, 84)
 
         targets, delta, q2_max = self.get_q_update(s, a, r, s2, term, True)
 
-        # TODO: ZERO GRADIENTS
-        raise NotImplemented("qLearnMinibatch zero gradients")
-
-        raise NotImplemented("qLearnMinibatch backprop")
-
-        raise NotImplemented("qLearnMinibatch add weight cost to grad")
-
-        lr = self.l_greedy.greedy(self.steps)
+        lr = self.l_greedy.greedy(self.num_steps)
         lr = np.max([lr, self.greedy.end])
 
-        raise NotImplemented("qLearnMinibatch apply gradients")
+        # pdb.set_trace()
+        self.reset_model(lr)
 
-        raise NotImplemented("qLearnMinibatch accumulate update")
+        self.network.fit(s, targets)
+
+        # raise NotImplemented("qLearnMinibatch add weight cost to grad")
+
+        #lr = self.l_greedy.greedy(self.steps)
+        #lr = np.max([lr, self.greedy.end])
+
+        # raise NotImplemented("qLearnMinibatch apply gradients")
+
+        # raise NotImplemented("qLearnMinibatch accumulate update")
 
     def perceive(self, reward, state, term, test=False):
 
@@ -179,7 +227,7 @@ class NeuralQLearner(object):
         curr_state = self.transitions.get_recent()
         curr_state = np.expand_dims(curr_state, axis=0)
 
-        action_idx = 1
+        action_idx = 0
         if not term:
             action_idx = self.step(curr_state)
 
@@ -201,6 +249,6 @@ class NeuralQLearner(object):
             self.target_net.set_weights(self.network.get_weights())
 
         if not term:
-            return action_idx
+            return build_action_array(self.n_actions, action_idx)
 
         return 0

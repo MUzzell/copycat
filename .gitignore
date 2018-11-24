@@ -1,6 +1,9 @@
+*.swp
 *.pyc
 env/*
 *.avi
 *.mp4
 *.txt
 *.log
+roms/*
+*.sublime-workspace

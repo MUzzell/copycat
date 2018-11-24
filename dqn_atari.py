@@ -2,7 +2,7 @@
 import numpy as np
 import tensorflow as tf
 import argparse as ap
-import gym
+import retro
 from PIL import Image
 
 import pdb
@@ -36,7 +36,8 @@ def reset_env(env, frameskip=4):
 
 
 parser = ap.ArgumentParser("Test DQN Atari runner")
-parser.add_argument("game", default="space_invaders")
+parser.add_argument("game", default="SpaceInvaders-Atari2600",
+                    choices=retro.data.list_games())
 
 parser.add_argument("-f", "--frame_limit", default=50000)
 parser.add_argument("-l", "--learn_start", default=5000)
@@ -46,7 +47,7 @@ parser.add_argument("-rm", "--replay_memory", default=30000)
 
 args = parser.parse_args()
 
-env = gym.make(args.game)
+env = retro.make(args.game)
 
 agent = dqn_a.NeuralQLearner(
     env.action_space.n,
@@ -66,7 +67,6 @@ step = 0
 while step < args.frame_limit:
 
     step += 1
-    pdb.set_trace()
     action_idx = agent.perceive(reward, screen, term)
 
     if not term:
@@ -78,7 +78,7 @@ while step < args.frame_limit:
 
 
 for i in range(4):
-    img = preproc((env.step(0))[0], (84,84))
-    input_state[i,:] = img
+    img = preproc((env.step(0))[0], (84, 84))
+    input_state[i, :] = img
 
 action = agent.target_net.predict(np.expand_dims(input_state, axis=0))

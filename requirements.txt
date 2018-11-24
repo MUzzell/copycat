@@ -1,5 +1,6 @@
 wheel>=0.26
 numpy>=1.15.0
 tensorflow>=1.7.0
-gym>=0.10.5
-gym[atari]
+gym==0.10.9
+gym-retro==0.6.0
+Keras==2.2.3

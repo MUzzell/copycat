@@ -1,6 +1,6 @@
 
 import tensorflow as tf
-from  tensorflow import     keras
+from tensorflow import keras
 import numpy as np
 
 
@@ -27,7 +27,7 @@ class DQNNetwork(object):
                                     activation='relu'),
                 # keras.layers.Reshape(nel),
                 keras.layers.Dense(512),
-                keras.layers.Dense(6)
+                keras.layers.Dense(self.n_actions)
             ])
 
         return model

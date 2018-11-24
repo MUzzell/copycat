@@ -68,6 +68,8 @@ class TransitionTable(object):
         self.buf_s = np.zeros((self.buffer_size, s_size), dtype=np.uint8)
         self.buf_s2 = np.zeros((self.buffer_size, s_size), dtype=np.uint8)
 
+        self.buf_ind = None
+
     def reset():
         self.num_entries = 0
         self.insert_index = 0
@@ -83,18 +85,21 @@ class TransitionTable(object):
     def fill_bufer(self):
         assert self.num_entries >= self.buffer_size
 
-        self.buf_ind = 1
-
+        self.buf_ind = 0
         for buf_ind in range(self.buffer_size):
-            s,a,r,s2,term = self.sample_one(1)
-            self.buf_s[buf_ind] = np.copy(s)
+            s, a, r, s2, term = self.sample_one(1)
+            self.buf_s[buf_ind] = np.copy(
+                s.reshape(self.buf_s.shape[1])
+            )
             self.buf_a[buf_ind] = np.copy(a)
             self.buf_r[buf_ind] = r
-            self.buf_s2[buf_ind] = np.copy(s2)
+            self.buf_s2[buf_ind] = np.copy(
+                s2.reshape(self.buf_s2.shape[1])
+            )
             self.buf_term[buf_ind] = term
 
-        self.buf_s /= 255
-        self.buf_s2 /= 255
+        self.buf_s = self.buf_s / 255
+        self.buf_s2 = self.buf_s / 255
 
     def sample_one(self, i):
         assert self.num_entries > 1
@@ -135,10 +140,11 @@ class TransitionTable(object):
 
         self.buf_ind = self.buf_ind + batch_size
 
-        return (self.buf_s[idx:idx+batch_size-1],
-                self.buf_r[idx:idx+batch_size-1],
-                self.buf_s2[idx:idx+batch_size-1],
-                self.buf_term[idx:idx+batch_size-1])
+        return (self.buf_s[idx:idx+batch_size],
+                self.buf_a[idx:idx+batch_size],
+                self.buf_r[idx:idx+batch_size],
+                self.buf_s2[idx:idx+batch_size],
+                self.buf_term[idx:idx+batch_size])
 
     def concat_frames(self, idx, use_recent=False):
         if use_recent:
@@ -216,17 +222,15 @@ class TransitionTable(object):
         assert a is not None, "Action cannot be null"
         assert r is not None, "Reward cannot be null"
 
-        pdb.set_trace()
-
         if self.num_entries < self.max_size:
             self.num_entries += 1
 
         self.insert_index += 1
 
-        if self.insert_index > self.max_size:
+        if self.insert_index >= self.max_size:
             self.insert_index = 0
 
-        self.s[self.insert_index] = np.copy(s) * 255
+        self.s[self.insert_index, :] = np.copy(s.reshape(self.state_dim)) # * 255
         self.a[self.insert_index] = a
         self.r[self.insert_index] = r
 
@@ -236,7 +240,7 @@ class TransitionTable(object):
             self.t[self.insert_index] = 0
 
     def add_recent_state(self, s, term):
-        s = np.copy(s) * 255
+        s = np.copy(s) # * 255
 
         if len(self.recent_s) == 0:
             for i in range(self.recent_mem_size):
@@ -261,4 +265,3 @@ class TransitionTable(object):
 
         if len(self.recent_a) > self.recent_mem_size:
             reverse_pop(self.recent_a)
-
