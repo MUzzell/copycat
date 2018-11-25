@@ -110,8 +110,20 @@ class NeuralQLearner(object):
 
         if len(state.shape) == 2:
             raise ValueError("State must be 3D!")
+        import pdb; pdb.set_trace()
+        q = self.network.predict(state)
+        maxq = q[0, 0]
+        besta = [0]
 
-        q = self.run_net(state)
+        for i in range(1, self.n_actions):
+            if q[0, i] > maxq:
+                besta = [i]
+                maxq = [q[0, i]]
+            elif q[0, i] == maxq:
+                besta.append(i)
+
+        self.bestq = maxq
+        return np.random.choice(besta)
 
     def sample_validation_data(self):
         s, a, r, s2, term = self.transitions.sample(self.valid_size)
@@ -138,12 +150,12 @@ class NeuralQLearner(object):
         # q2_max = np.random.random(self.n_actions)
         q2 = np.multiply(q2_max.copy() * self.discount, term)
 
-        # delta is not touched before q+1 line,
+        # delta is not touched before q+-1 line,
         # is this pointless?
         delta = rewards.copy()
         if self.rescale_r:
             delta = delta / self.r_max
-        delta += q2
+        delta = np.add(delta, q2)
 
         q_all = self.network.predict(states)
         # q_all = np.random.random(self.n_actions)
@@ -152,7 +164,7 @@ class NeuralQLearner(object):
         for i in range(q_all.shape[0]):
             q[i] = q_all[i, int(actions[i])]
 
-        delta = q + -1
+        delta = np.add(q, -1)
 
         if self.clip_delta:
             delta[delta >= self.clip_delta] = self.clip_delta
@@ -188,7 +200,7 @@ class NeuralQLearner(object):
         # pdb.set_trace()
         self.reset_model(lr)
 
-        self.network.fit(s, targets)
+        self.network.fit(s, targets, verbose=0)
 
         # raise NotImplemented("qLearnMinibatch add weight cost to grad")
 
@@ -214,7 +226,8 @@ class NeuralQLearner(object):
 
         self.transitions.add_recent_state(state, term)
 
-        curr_full_state = self.transitions.get_recent()
+        # never called
+        # curr_full_state = self.transitions.get_recent()
 
         if self.last_state is not None and not test:
             self.transitions.add(
@@ -246,6 +259,7 @@ class NeuralQLearner(object):
         self.last_term = term
 
         if self.target_q and self.num_steps % self.target_q == 1:
+            print("Copy target_net weights")
             self.target_net.set_weights(self.network.get_weights())
 
         if not term:

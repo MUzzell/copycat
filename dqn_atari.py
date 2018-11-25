@@ -1,38 +1,73 @@
 
 import numpy as np
-import tensorflow as tf
 import argparse as ap
 import retro
-from PIL import Image
+import time
 
 import pdb
 
 from dqn import agent as dqn_a
-from dqn.img_ops import preproc
 
 
-def run_step(env, action_idx, frameskip=4, state_dim=(210,160,3)):
+def run_step(env, action_idx, frameskip=4):
 
-    state = np.zeros((frameskip,) + state_dim)
+    state = None
     reward = 0.0
     term = False
 
     for i in range(frameskip):
         if term:
-            state[i, :] = state[i-1, :]
-        else:
-            state[i, :], reward, term, _ = env.step(action_idx)
-            reward += reward
+            break
 
-    assert state.shape == (frameskip,) + state_dim
+        state, sreward, term, _ = env.step(action_idx)
+        reward += sreward
 
     return state, reward, term
 
 
-def reset_env(env, frameskip=4):
+def run_evaluation(env, agent, eval_len):
+    screen, reward, term, = (env.reset(), 0, False)
 
-    screen = env.reset()
-    return np.array([screen for i in range(frameskip)]), 0, False
+    total_reward = 0
+    nrewards = 0
+    nepisodes = 0
+    episode_reward = 0
+
+    eval_start = time.time()
+
+    for i in range(args.eval_len):
+        action_idx = agent.perceive(reward, screen, term, test=True)
+
+        screen, reward, term = run_step(env, action_idx, 4)
+
+        episode_reward += reward
+        if reward != 0:
+            nrewards += 1
+
+        if term:
+            total_reward += episode_reward
+            episode_reward = 0
+            nepisodes += 1
+            screen, reward, term = (env.reset(), 0, False)
+
+    eval_time = time.time() - eval_start
+    print("TODO: compute_validation_statistics")
+
+    total_reward /= np.max([1, nepisodes])
+
+    print("TODO: Save best network")
+    print("TODO: V, TD error & qMax histories")
+
+    print(
+        "Steps: %d (frames %d)\n"
+        "Reward: %.2f Episodes: %d"
+        "Eval time: %d Eval rate: %.2f".format(
+            args.eval_len, args.eval_len*4,
+            total_reward, nepisodes,
+            eval_time.total_seconds(),
+            args.eval_len*4 / eval_time.total_seconds()
+        )
+    )
 
 
 parser = ap.ArgumentParser("Test DQN Atari runner")
@@ -56,9 +91,7 @@ agent = dqn_a.NeuralQLearner(
     learn_start=args.learn_start, discount=0.99,
     state_dim=7056, replay_memory=args.replay_memory)
 
-screen = env.reset()
-reward = 0
-term = False
+screen, reward, term = (env.reset(), 0, False)
 
 input_state = np.zeros((4, 84, 84), dtype=np.float32)
 
@@ -70,15 +103,9 @@ while step < args.frame_limit:
     action_idx = agent.perceive(reward, screen, term)
 
     if not term:
-        screen, reward, term, _ = env.step(action_idx)
+        screen, reward, term = run_step(env, action_idx, 4)
     else:
-        screen = env.reset()
-        reward = 0
-        term = False
+        screen, reward, term = (env.reset(), 0, False)
 
-
-for i in range(4):
-    img = preproc((env.step(0))[0], (84, 84))
-    input_state[i, :] = img
-
-action = agent.target_net.predict(np.expand_dims(input_state, axis=0))
+    if step % args.eval_freq == 0 and step > args.learn_start:
+        run_evaluation(env, agent, args.eval_len)
