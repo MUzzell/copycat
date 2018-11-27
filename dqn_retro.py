@@ -2,11 +2,15 @@
 import numpy as np
 import argparse as ap
 import retro
-import time
+from datetime import datetime
 
 import pdb
 
 from dqn import agent as dqn_a
+
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def run_step(env, action_idx, frameskip=4):
@@ -33,7 +37,7 @@ def run_evaluation(env, agent, eval_len):
     nepisodes = 0
     episode_reward = 0
 
-    eval_start = time.time()
+    eval_start = datetime.now()
 
     for i in range(args.eval_len):
         action_idx = agent.perceive(reward, screen, term, test=True)
@@ -50,7 +54,7 @@ def run_evaluation(env, agent, eval_len):
             nepisodes += 1
             screen, reward, term = (env.reset(), 0, False)
 
-    eval_time = time.time() - eval_start
+    eval_time = datetime.now() - eval_start
     print("TODO: compute_validation_statistics")
 
     total_reward /= np.max([1, nepisodes])
@@ -58,15 +62,14 @@ def run_evaluation(env, agent, eval_len):
     print("TODO: Save best network")
     print("TODO: V, TD error & qMax histories")
 
-    print(
+    logger.info(
         "Steps: %d (frames %d)\n"
         "Reward: %.2f Episodes: %d"
-        "Eval time: %d Eval rate: %.2f".format(
-            args.eval_len, args.eval_len*4,
-            total_reward, nepisodes,
-            eval_time.total_seconds(),
-            args.eval_len*4 / eval_time.total_seconds()
-        )
+        "Eval time: %d Eval FPS: %.2f",
+        args.eval_len, args.eval_len*4,
+        total_reward, nepisodes,
+        eval_time.total_seconds(),
+        args.eval_len*4 / eval_time.total_seconds()
     )
 
 
@@ -83,6 +86,7 @@ parser.add_argument("-rm", "--replay_memory", default=30000)
 args = parser.parse_args()
 
 env = retro.make(args.game)
+logger.info("Made game env %s", args.game)
 
 agent = dqn_a.NeuralQLearner(
     env.action_space.n,
@@ -97,15 +101,28 @@ input_state = np.zeros((4, 84, 84), dtype=np.float32)
 
 step = 0
 
+logger.info("Starting")
+
+running_rew = 0
+running_stp = 0
+
 while step < args.frame_limit:
 
     step += 1
+    running_stp += 1
     action_idx = agent.perceive(reward, screen, term)
 
     if not term:
         screen, reward, term = run_step(env, action_idx, 4)
     else:
+        logger.debug("Game over: %d steps, %d. %d steps total",
+                     running_stp, running_rew, step)
         screen, reward, term = (env.reset(), 0, False)
+        running_stp = 0
+        running_rew = 0
+
+    running_rew += reward
 
     if step % args.eval_freq == 0 and step > args.learn_start:
+        logger.debug('run_evaluation start')
         run_evaluation(env, agent, args.eval_len)

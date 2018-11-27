@@ -4,10 +4,11 @@ from .transition_table import TransitionTable
 from .img_ops import preproc
 
 import numpy as np
-import tensorflow as tf
 import keras
 
-import pdb
+import logging
+logger = logging.getLogger(__name__)
+
 
 def build_network(input_dims, n_actions):
 
@@ -45,6 +46,11 @@ def build_network(input_dims, n_actions):
         keras.layers.Dense(n_actions)
     ])
 
+    model.compile(
+        loss='mse',
+        optimizer=keras.optimizers.Adam(lr=0.00025)
+    )
+
     return model
 
 
@@ -65,7 +71,7 @@ class NeuralQLearner(object):
 
         self.l_start = kwargs.get('learn_start', 50000)
         self.discount = kwargs.get('discount', 0.99)
-        self.update_freq = kwargs.get('update_freq', 1)
+        self.update_freq = kwargs.get('update_freq', 4)
         self.n_replay = kwargs.get('n_replay', 1)
         self.state_dim = kwargs.get('state_dim', 7056)
         self.hist_len = kwargs.get('hist_len', 4)
@@ -110,7 +116,6 @@ class NeuralQLearner(object):
 
         if len(state.shape) == 2:
             raise ValueError("State must be 3D!")
-        import pdb; pdb.set_trace()
         q = self.network.predict(state)
         maxq = q[0, 0]
         besta = [0]
@@ -178,6 +183,7 @@ class NeuralQLearner(object):
         return targets, delta, q2_max
 
     def reset_model(self, lr):
+        logger.debug("Reset model to LR: %.4f", lr)
         # TODO: reset weights
         self.network.compile(
             loss='mse',
@@ -194,11 +200,12 @@ class NeuralQLearner(object):
 
         targets, delta, q2_max = self.get_q_update(s, a, r, s2, term, True)
 
-        lr = self.l_greedy.greedy(self.num_steps)
-        lr = np.max([lr, self.greedy.end])
+        #t = np.max([0, self.num_steps - self.l_start])
+        #lr = (self.l_greedy.start - self.l_greedy.end) * (self.l_greedy.endt - t)/self.l_greedy.endt + self.l_greedy.end
+        #lr = np.max([lr, self.l_greedy.end])
 
         # pdb.set_trace()
-        self.reset_model(lr)
+        #self.reset_model(lr)
 
         self.network.fit(s, targets, verbose=0)
 
@@ -234,8 +241,8 @@ class NeuralQLearner(object):
                 self.last_state, self.last_action, reward,
                 self.last_term)
 
-        if self.num_steps == self.l_start + 1 and not test:
-            self.sample_validation_data()
+        # if self.num_steps == self.l_start + 1 and not test:
+        #     self.sample_validation_data()
 
         curr_state = self.transitions.get_recent()
         curr_state = np.expand_dims(curr_state, axis=0)
@@ -259,10 +266,10 @@ class NeuralQLearner(object):
         self.last_term = term
 
         if self.target_q and self.num_steps % self.target_q == 1:
-            print("Copy target_net weights")
+            logger.debug("Copy target_net weights")
             self.target_net.set_weights(self.network.get_weights())
 
         if not term:
             return build_action_array(self.n_actions, action_idx)
 
-        return 0
+        return [0] * self.n_actions

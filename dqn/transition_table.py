@@ -2,6 +2,9 @@ import numpy as np
 
 import pdb
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 def reverse_pop(a):
     a.reverse()
@@ -134,9 +137,13 @@ class TransitionTable(object):
         if (
           not self.buf_ind or
           self.buf_ind + batch_size-1 > self.buffer_size):
+            logger.debug("Filling buffer")
             self.fill_bufer()
 
         idx = self.buf_ind
+
+        logger.debug("Sampling from buffer %d -> %d",
+                     idx, idx + batch_size)
 
         self.buf_ind = self.buf_ind + batch_size
 
@@ -228,6 +235,7 @@ class TransitionTable(object):
         self.insert_index += 1
 
         if self.insert_index >= self.max_size:
+            logger.debug("Resetting insert_index")
             self.insert_index = 0
 
         self.s[self.insert_index, :] = np.copy(s.reshape(self.state_dim)) # * 255
