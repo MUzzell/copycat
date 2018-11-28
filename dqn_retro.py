@@ -64,7 +64,7 @@ def run_evaluation(env, agent, eval_len):
 
     logger.info(
         "Steps: %d (frames %d)\n"
-        "Reward: %.2f Episodes: %d"
+        "Reward: %.2f Episodes: %d "
         "Eval time: %d Eval FPS: %.2f",
         args.eval_len, args.eval_len*4,
         total_reward, nepisodes,
@@ -77,11 +77,11 @@ parser = ap.ArgumentParser("Test DQN Atari runner")
 parser.add_argument("game", default="SpaceInvaders-Atari2600",
                     choices=retro.data.list_games())
 
-parser.add_argument("-f", "--frame_limit", default=50000)
-parser.add_argument("-l", "--learn_start", default=5000)
-parser.add_argument("-e", "--eval_freq", default=10000)
-parser.add_argument("-el", "--eval_len", default=5000)
-parser.add_argument("-rm", "--replay_memory", default=30000)
+parser.add_argument("-f", "--frame_limit", default=50000, type=int)
+parser.add_argument("-l", "--learn_start", default=5000, type=int)
+parser.add_argument("-e", "--eval_freq", default=10000, type=int)
+parser.add_argument("-el", "--eval_len", default=5000, type=int)
+parser.add_argument("-rm", "--replay_memory", default=30000, type=int)
 
 args = parser.parse_args()
 
