@@ -48,7 +48,7 @@ def build_network(input_dims, n_actions):
 
     model.compile(
         loss='mse',
-        optimizer=keras.optimizers.Adam(lr=0.00025)
+        optimizer=keras.optimizers.Adam(lr=0.001)
     )
 
     return model
@@ -131,13 +131,29 @@ class NeuralQLearner(object):
         return np.random.choice(besta)
 
     def sample_validation_data(self):
+        assert self.transitions.size > self.valid_size
         s, a, r, s2, term = self.transitions.sample(self.valid_size)
+        s2 = s2.reshape(self.valid_size, self.hist_len, 84, 84)
+        s = s.reshape(self.valid_size, self.hist_len, 84, 84)
 
         self.valid_s = np.copy(s)
         self.valid_a = np.copy(a)
         self.valid_r = np.copy(r)
         self.valid_s2 = np.copy(s2)
         self.valid_term = np.copy(term)
+
+    def sample_validation_statistics(self):
+        self.sample_validation_data()
+
+        targets, delta, q2_max = self.get_q_update(
+            self.valid_s, self.valid_a, self.valid_r,
+            self.valid_s2, self.valid_term
+        )
+
+        return (
+            self.q_max * np.mean(q2_max),
+            np.mean(np.abs(delta.copy()))
+        )
 
     def get_q_update(
         self,
@@ -195,8 +211,8 @@ class NeuralQLearner(object):
         assert self.transitions.size > self.minibatch_size
 
         s, a, r, s2, term = self.transitions.sample(self.minibatch_size)
-        s2 = s2.reshape(32, self.hist_len, 84, 84)
-        s = s.reshape(32, self.hist_len, 84, 84)
+        s2 = s2.reshape(self.minibatch_size, self.hist_len, 84, 84)
+        s = s.reshape(self.minibatch_size, self.hist_len, 84, 84)
 
         targets, delta, q2_max = self.get_q_update(s, a, r, s2, term, True)
 

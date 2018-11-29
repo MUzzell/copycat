@@ -55,17 +55,19 @@ def run_evaluation(env, agent, eval_len):
             screen, reward, term = (env.reset(), 0, False)
 
     eval_time = datetime.now() - eval_start
-    print("TODO: compute_validation_statistics")
 
     total_reward /= np.max([1, nepisodes])
 
-    print("TODO: Save best network")
-    print("TODO: V, TD error & qMax histories")
+    logger.debug("TODO: Save best network")
+    logger.debug("TODO: V, TD error & qMax histories")
+
+    v_avg, tderr_avg = agent.sample_validation_statistics()
 
     logger.info(
-        "Steps: %d (frames %d)\n"
-        "Reward: %.2f Episodes: %d "
-        "Eval time: %d Eval FPS: %.2f",
+        "Greedy: %.4f v_avg: %.4f, tderr_avg: %.4f EvalSteps: %d (frames %d)\n"
+        "Reward: %.2f Episodes: %d Eval time: %d Eval FPS: %.2f",
+        agent.greedy.greedy(agent.num_steps),
+        v_avg, tderr_avg,
         args.eval_len, args.eval_len*4,
         total_reward, nepisodes,
         eval_time.total_seconds(),
@@ -121,8 +123,7 @@ while step < args.frame_limit:
         running_stp = 0
         running_rew = 0
 
-    running_rew += reward
-
     if step % args.eval_freq == 0 and step > args.learn_start:
+        logger.info("Steps: %d", step)
         logger.debug('run_evaluation start')
         run_evaluation(env, agent, args.eval_len)
