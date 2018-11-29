@@ -152,7 +152,7 @@ class NeuralQLearner(object):
 
         return (
             self.q_max * np.mean(q2_max),
-            np.mean(np.abs(delta.copy()))
+            np.mean(np.abs(delta))
         )
 
     def get_q_update(
@@ -178,7 +178,7 @@ class NeuralQLearner(object):
             delta = delta / self.r_max
         delta = np.add(delta, q2)
 
-        q_all = self.network.predict(states)
+        q_all = target_q_net.predict(states)
         # q_all = np.random.random(self.n_actions)
         q = np.zeros(q_all.shape[0])
 
