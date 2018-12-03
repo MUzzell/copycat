@@ -199,7 +199,7 @@ class NeuralQLearner(object):
         self.transitions.add_recent_state(state, term)
 
         # never called
-        # curr_full_state = self.transitions.get_recent()
+        curr_full_state = self.transitions.get_recent()
 
         if self.last_state is not None and not test:
             self.transitions.add(

@@ -46,7 +46,7 @@ class TransitionTable(object):
         self.hist_ind = np.zeros(self.hist_len, dtype=np.uint32)
 
         for i in range(self.hist_len):
-            self.hist_ind[i] = (i) * self.hist_spacing
+            self.hist_ind[i] = i * self.hist_spacing
 
         self.s = np.zeros((self.max_size, self.state_dim), dtype=np.uint8)
         self.a = np.zeros(self.max_size, dtype=np.uint32)
@@ -102,12 +102,12 @@ class TransitionTable(object):
             self.buf_term[buf_ind] = term
 
         self.buf_s = self.buf_s / 255
-        self.buf_s2 = self.buf_s / 255
+        self.buf_s2 = self.buf_s2 / 255
 
     def sample_one(self, i):
         assert self.num_entries > 1
 
-        index = -1
+        index = 0
         valid = False
 
         while not valid:
@@ -124,7 +124,7 @@ class TransitionTable(object):
 
             if (
               self.non_event_prob < 1 and
-              self.t[index+self.recent_mem_size] == 1 and
+              self.t[index+self.recent_mem_size] == 0 and
               self.r[index+self.recent_mem_size-1] == 0 and
               np.random.uniform() > self.non_term_prob):
                 valid = False
@@ -238,17 +238,14 @@ class TransitionTable(object):
             logger.debug("Resetting insert_index")
             self.insert_index = 0
 
-        self.s[self.insert_index, :] = np.copy(s.reshape(self.state_dim)) # * 255
+        self.s[self.insert_index] = np.copy(s.reshape(self.state_dim)) * 255
         self.a[self.insert_index] = a
         self.r[self.insert_index] = r
 
-        if term:
-            self.t[self.insert_index] = 1
-        else:
-            self.t[self.insert_index] = 0
+        self.t[self.insert_index] = 1 if term else 0
 
     def add_recent_state(self, s, term):
-        s = np.copy(s) # * 255
+        s = np.copy(s) * 255
 
         if len(self.recent_s) == 0:
             for i in range(self.recent_mem_size):
