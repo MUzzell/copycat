@@ -13,24 +13,31 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def run_step(env, action_idx, frameskip=4):
+def run_step(env, action_idx, frameskip=4, training=False):
 
     state = None
     reward = 0.0
     term = False
+    lives = env.data.lookup_value("lives") if training else None
 
     for i in range(frameskip):
         if term:
             break
 
-        state, sreward, term, _ = env.step(action_idx)
+        state, sreward, term, meta = env.step(action_idx)
         reward += sreward
+
+        # terminate if lost a life when training
+        if training and meta['lives'] < lives:
+            term = True
 
     return state, reward, term
 
 
 def run_evaluation(env, agent, eval_len):
     screen, reward, term, = (env.reset(), 0, False)
+
+    env.auto_record(".")
 
     total_reward = 0
     nrewards = 0
@@ -56,6 +63,8 @@ def run_evaluation(env, agent, eval_len):
 
     eval_time = datetime.now() - eval_start
 
+    env.stop_record()
+
     total_reward /= np.max([1, nepisodes])
 
     logger.debug("TODO: Save best network")
@@ -64,11 +73,13 @@ def run_evaluation(env, agent, eval_len):
     v_avg, tderr_avg = agent.sample_validation_statistics()
 
     logger.info(
-        "Greedy: %.4f v_avg: %.4f, tderr_avg: %.4f EvalSteps: %d (frames %d)\n"
-        "Reward: %.2f Episodes: %d Eval time: %d Eval FPS: %.2f",
+        "Greedy: %.4f v_avg: %.4f, tderr_avg: %.4f EvalSteps: %d (frames %d)",
         agent.greedy.greedy(agent.num_steps),
         v_avg, tderr_avg,
-        args.eval_len, args.eval_len*4,
+        args.eval_len, args.eval_len*4
+    )
+    logger.info(
+        "Reward: %.2f Episodes: %d Eval time: %d Eval FPS: %.2f",
         total_reward, nepisodes,
         eval_time.total_seconds(),
         args.eval_len*4 / eval_time.total_seconds()
@@ -84,10 +95,11 @@ parser.add_argument("-l", "--learn_start", default=5000, type=int)
 parser.add_argument("-e", "--eval_freq", default=10000, type=int)
 parser.add_argument("-el", "--eval_len", default=5000, type=int)
 parser.add_argument("-rm", "--replay_memory", default=30000, type=int)
+parser.add_argument("-r", "--record", default=None, type=str)
 
 args = parser.parse_args()
 
-env = retro.make(args.game)
+env = retro.make(game=args.game)
 logger.info("Made game env %s", args.game)
 
 agent = dqn_a.NeuralQLearner(
@@ -111,11 +123,13 @@ running_stp = 0
 while step < args.frame_limit:
 
     step += 1
+    if step == args.learn_start:
+        logger.info("Learn start")
     running_stp += 1
     action_idx = agent.perceive(reward, screen, term)
 
     if not term:
-        screen, reward, term = run_step(env, action_idx, 4)
+        screen, reward, term = run_step(env, action_idx, 4, True)
     else:
         logger.debug("Game over: %d steps, %d. %d steps total",
                      running_stp, running_rew, step)
